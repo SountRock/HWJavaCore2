@@ -12,12 +12,13 @@ public class CrestZero {
     private final Random random = new Random();
     public String[][] field;
     private int WIN_COUNT;
-    private int RESISTANCE;
+    private int AL_IGNORE;
 
-    public CrestZero(int fieldSize, int winCount, int resistance) {
+    public CrestZero(int fieldSize, int winCount) {
         field = new String[fieldSize][fieldSize];
         WIN_COUNT = winCount < fieldSize ? winCount : fieldSize;
-        RESISTANCE = resistance < WIN_COUNT - 2 ? resistance : WIN_COUNT - 2;
+        AL_IGNORE = fieldSize - WIN_COUNT;
+
         for (int y = 0; y < fieldSize; y++){
             for (int x = 0; x < fieldSize; x++){
                 field[y][x] = DOT_EMPTY;
@@ -134,12 +135,13 @@ public class CrestZero {
      * Ход игрока (компьютера)
      */
     private boolean aiTurn(){
-        boolean canBlock = smartTurn2(0,0, RESISTANCE);
+        boolean canBlock = smartTurn(0,0);
+        System.out.println(canBlock);
         if(!canBlock){
             int x;
             int y;
             do{
-                x = random.nextInt(field[0].length);
+                x = random.nextInt(field.length);
                 y = random.nextInt(field.length);
             } while (!isCellEmpty(y, x));
             field[y][x] = DOT_AI;
@@ -148,85 +150,167 @@ public class CrestZero {
         return checkWin(DOT_AI);
     }
 
-    private boolean smartTurn2(int delta_y, int delta_x, int resistance){
-        if (resistance >= 0){
-            int pre_win_count = WIN_COUNT - resistance;
-            int[] preWinX = checkWinX(DOT_HUMAN, pre_win_count, delta_y);
+    /**
+     * Метод умного хода AL
+     * @param delta_y
+     * @param delta_x
+     * @return isTurn
+     */
+    private boolean smartTurn(int delta_y, int delta_x){
+        int[] posX = searchPreWinXOpponents(DOT_HUMAN, DOT_AI, delta_y);
+        if(posX != null){
+            field[posX[0]][posX[1]] = DOT_AI;
+            return true;
+        }
+        int[] posY = searchPreWinYOpponents(DOT_HUMAN, DOT_AI, delta_x);
+        if(posY != null){
+            field[posY[0]][posY[1]] = DOT_AI;
+            return true;
+        }
+        int[] posDia1 = searchPreWinDiagonal1Opponents(DOT_HUMAN, DOT_AI, delta_x);
+        if(posDia1 != null){
+            field[posDia1[0]][posDia1[1]] = DOT_AI;
+            return true;
+        }
+        int[] posDia2 = searchPreWinDiagonal2Opponents(DOT_HUMAN, DOT_AI, delta_x);
+        if(posDia2 != null){
+            field[posDia2[0]][posDia2[1]] = DOT_AI;
+            return true;
+        }
 
-            if(preWinX != null) {
-                int indexY;
-                int indexX;
-                if(preWinX[2] == 0){
-                    indexY = preWinX[0];
-                    indexX = preWinX[1] - pre_win_count;
-                    if(isCellValid(indexY, indexX) && isCellEmpty(indexY, indexX)){
-                        field[indexY][indexX] = DOT_AI;
-                        return true;
-                    }
-                    indexX = preWinX[1] + 1;
-                    if(isCellValid(indexY, indexX) && isCellEmpty(indexY, indexX)){
-                        field[indexY][indexX] = DOT_AI;
-                        return true;
-                    }
-                } else {
-                    indexY = preWinX[0] - pre_win_count;
-                    indexX = preWinX[1] - pre_win_count;
-                    if(isCellValid(indexY, indexX) && isCellEmpty(indexY, indexX)){
-                        field[indexY][indexX] = DOT_AI;
-                        return true;
-                    }
-                    indexY = preWinX[0] + 1;
-                    indexX = preWinX[1] + 1;
-                    if(isCellValid(indexY, indexX) && isCellEmpty(indexY, indexX)){
-                        field[indexY][indexX] = DOT_AI;
-                        return true;
-                    }
-                }
-            }
-
-            int[] preWinY = checkWinY(DOT_HUMAN, pre_win_count, delta_x);
-            if(preWinY != null) {
-                int indexY;
-                int indexX;
-                if(preWinY[2] == 0){
-                    indexY = preWinY[0] - pre_win_count;
-                    indexX = preWinY[1];
-                    if(isCellValid(indexY, indexX) && isCellEmpty(indexY, indexX)){
-                        field[indexY][indexX] = DOT_AI;
-                        return true;
-                    }
-                    indexY = preWinY[0] + 1;
-                    if(isCellValid(indexY, indexX) && isCellEmpty(indexY, indexX)){
-                        field[indexY][indexX] = DOT_AI;
-                        return true;
-                    }
-                } else {
-                    indexY = preWinY[0] - pre_win_count;
-                    indexX = preWinY[1] + pre_win_count;
-                    if(isCellValid(indexY, indexX) && isCellEmpty(indexY, indexX)){
-                        field[indexY][indexX] = DOT_AI;
-                        return true;
-                    }
-                    indexY = preWinY[0] + 1;
-                    indexX = preWinY[1] - 1;
-                    if(isCellValid(indexY, indexX) && isCellEmpty(indexY, indexX)){
-                        field[indexY][indexX] = DOT_AI;
-                        return true;
-                    }
-                }
-            }
-
-            if(delta_y < field.length){
-                smartTurn2(++delta_y, delta_x, resistance);
-            }
-            if(delta_x < field[0].length){
-                smartTurn2(delta_y, ++delta_x, resistance);
-            }
-
-            smartTurn2(0, 0, --resistance);
+        if(delta_y < field.length){
+            smartTurn(++delta_y, delta_x);
+        }
+        if(delta_x < field.length){
+            smartTurn(delta_y, ++delta_x);
         }
 
         return false;
+    }
+
+    /**
+     * Поиск возможной победы по X
+     * @param dotOpponent
+     * @param youDot
+     * @param delta_y
+     * @return position
+     */
+    private int[] searchPreWinXOpponents(String dotOpponent, String youDot, int delta_y){
+        for (int y = delta_y; y < field.length; y++) {
+            int countDotOp = 0;
+            int countDotYou = 0;
+            int[] pos = null;
+
+            for (int x = 0; x < field.length; x++) {
+                if(field[y][x].equals(dotOpponent)){
+                    countDotOp++;
+
+                } else if (field[y][x].equals(youDot)){
+                    countDotYou++;
+
+                } else if (isCellEmpty(y, x)){
+                    pos = new int[]{y, x};
+
+                }
+                if((countDotOp >= WIN_COUNT - 1) && (countDotYou < AL_IGNORE)) return pos;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Поиск победы по диагонале с лева на право
+     * @param dotOpponent
+     * @param youDot
+     * @param delta_x
+     * @return position
+     */
+    private int[] searchPreWinDiagonal1Opponents(String dotOpponent, String youDot, int delta_x){
+        for (int y = 0; y < field.length; y++) {
+            for (int x = delta_x; x < field.length; x++) {
+                int countDotOp = 0;
+                int countDotYou = 0;
+                int[] pos = null;
+
+                for (int index = 0; (y + index < field.length) & (x + index < field.length); index++) {
+                    if(field[y + index][x + index].equals(dotOpponent)){
+                        countDotOp++;
+
+                    } else if(field[y + index][x + index].equals(youDot)){
+                        countDotYou++;
+
+                    } else if (isCellEmpty(y + index, x + index)){
+                        pos = new int[]{y + index, x + index};
+
+                    }
+                    if((countDotOp >= WIN_COUNT - 1) && (countDotYou < AL_IGNORE)) return pos;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Поиск возможной победы по Y
+     * @param dotOpponent
+     * @param youDot
+     * @param delta_x
+     * @return position
+     */
+    private int[] searchPreWinYOpponents(String dotOpponent, String youDot, int delta_x){
+        for (int x = delta_x; x < field.length; x++) {
+            int countDotOp = 0;
+            int countDotYou = 0;
+            int[] pos = null;
+
+            for (int y = 0; y < field.length; y++) {
+                if(field[y][x].equals(dotOpponent)){
+                    countDotOp++;
+                    //int[] temp = searchPreWinDiagonal2Opponents(y, x, dotOpponent, youDot);
+                    //if(temp != null) return temp;
+                } else if (field[y][x].equals(youDot)){
+                    countDotYou++;
+                } else if (isCellEmpty(y, x)){
+                    pos = new int[]{y, x};
+                }
+                if((countDotOp >= WIN_COUNT - 1) && (countDotYou < AL_IGNORE)) return pos;
+            }
+
+        }
+
+        return null;
+    }
+
+    /**
+     * Поиск победы по диагонале с права на лево
+     * @param dotOpponent
+     * @param youDot
+     * @param delta_x
+     * @return position
+     */
+    private int[] searchPreWinDiagonal2Opponents(String dotOpponent, String youDot, int delta_x){
+        for (int y = 0; y < field.length; y++) {
+            for (int x = delta_x; x < field.length; x++) {
+                int countDotOp = 0;
+                int countDotYou = 0;
+                int[] pos = null;
+
+                for (int index = 0; (y + index < field.length) & (x - index >= 0); index++) {
+                    if(field[y + index][x - index].equals(dotOpponent)){
+                        countDotOp++;
+                    } else if(field[y + index][x - index].equals(youDot)){
+                        countDotYou++;
+                    } else if (isCellEmpty(y + index, x - index)){
+                        pos = new int[]{y + index, x - index};
+                    }
+                    if((countDotOp >= WIN_COUNT - 1) && (countDotYou < AL_IGNORE)) return pos;
+                }
+            }
+        }
+
+        return null;
     }
     //GAME/////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -252,7 +336,7 @@ public class CrestZero {
      * @return checkValue
      */
     public boolean checkWin(String dot){
-        return checkWinX(dot, WIN_COUNT, 0) != null | checkWinY(dot, WIN_COUNT, 0) != null;
+        return checkWinX(dot, WIN_COUNT, 0) | checkWinY(dot, WIN_COUNT, 0);
     }
 
     /**
@@ -260,9 +344,7 @@ public class CrestZero {
      * @param dot
      * @return checkValue
      */
-    private int[] checkWinX(String dot, int win_count, int delta_y){
-        int[] pos = null;
-
+    private boolean checkWinX(String dot, int win_count, int delta_y){
         for (int y = delta_y; y < field.length; y++){
             int countDot = 0;
 
@@ -270,21 +352,17 @@ public class CrestZero {
 
                 if(field[y][x].equals(dot)){
                     countDot++;
-                    pos = new int[]{y, x, 0};
-                    //0 - по оси
                 } else {
                     countDot = 0;
-                    pos = null;
                 }
 
-                if(countDot >= win_count) return pos;
+                if(countDot >= win_count) return true;
 
-                pos = checkDiagonal1Win(x, y, dot, win_count);
-                if(pos != null) return pos;
+                if(checkDiagonal1Win(x, y, dot, win_count)) return true;
             }
         }
 
-        return pos;
+        return false;
     }
 
     /**
@@ -294,21 +372,20 @@ public class CrestZero {
      * @param dot
      * @return checkValue
      */
-    private int[] checkDiagonal1Win(int x, int y, String dot, int win_count){
+    private boolean checkDiagonal1Win(int x, int y, String dot, int win_count){
         int i = 0;
         try {
             while (field[y + i][x + i].equals(dot)){
                 if(i >= win_count - 1){
-                    return new int[]{y + i, x + i, 1};
-                    //1 - по диагонале
+                    return true;
                 }
                 i++;
             }
         } catch (ArrayIndexOutOfBoundsException e){
-            return null;
+            return false;
         }
 
-        return null;
+        return false;
     }
 
     /**
@@ -316,30 +393,24 @@ public class CrestZero {
      * @param dot
      * @return checkValue
      */
-    private int[] checkWinY(String dot, int win_count, int delta_x){
-        int[] pos = null;
-
+    private boolean checkWinY(String dot, int win_count, int delta_x){
         for (int x = delta_x; x < field[0].length; x++){
             int countDot = 0;
 
             for (int y = 0; y < field.length; y++){
                 if(field[y][x].equals(dot)){
                     countDot++;
-                    pos = new int[]{y, x, 0};
-                    //0 - по оси
                 } else {
                     countDot = 0;
-                    pos = null;
                 }
 
-                if(countDot >= win_count) return pos;
+                if(countDot >= win_count) return true;
 
-                pos = checkDiagonal2Win(x, y, dot, win_count);
-                if(pos != null ) return pos;
+                if(checkDiagonal2Win(x, y, dot, win_count)) return true;
             }
         }
 
-        return pos;
+        return false;
     }
 
     /**
@@ -349,21 +420,21 @@ public class CrestZero {
      * @param dot
      * @return checkValue
      */
-    private int[] checkDiagonal2Win(int x, int y, String dot, int win_count){
+    private boolean checkDiagonal2Win(int x, int y, String dot, int win_count){
         int i = 0;
         try {
             while (field[y + i][x - i].equals(dot)){
                 if(i >= win_count - 1){
-                    return new int[]{y + i, x - i, 1};
+                    return true;
                     //1 - по диагонале
                 }
                 i++;
             }
         } catch (ArrayIndexOutOfBoundsException e){
-            return null;
+            return false;
         }
 
-        return null;
+        return false;
     }
     //WIN/////////////////////////////////////////////////////////////////////////////////////////////////////
 }
